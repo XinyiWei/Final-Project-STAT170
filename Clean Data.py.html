@@ -1,0 +1,593 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[2]:
+
+
+import pyspark
+import pandas as pd
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# import relevant parts of sklearn
+from sklearn import cluster, datasets
+from sklearn.preprocessing import scale
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+
+from scipy.cluster import hierarchy
+
+get_ipython().run_line_magic('matplotlib', 'inline')
+plt.style.use('seaborn-whitegrid')
+
+import seaborn as sns
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.config("spark.worker.memory", "8g").appName("Python Spark SQL basic example").getOrCreate()
+
+
+# # Loading Twitter Data
+
+# In[48]:
+
+
+twitter = pd.read_parquet("sample.parquet", engine='pyarrow', columns=None)
+
+
+# In[8]:
+
+
+pd.set_option('display.max_rows', 900)
+pd.set_option('display.max_columns', 900)
+pd.set_option('display.width', 1000)
+twitter.head(7)
+
+
+# # Loading Population Data
+
+# In[13]:
+
+
+population=pd.read_csv("pouplation3.csv")
+population.head(10)
+
+
+# # Loading Income Data 
+
+# In[21]:
+
+
+income=pd.read_csv("income.csv")
+income.head(10)
+
+
+# # Loading Area Data
+
+# In[22]:
+
+
+city_county=pd.read_csv("citycounty3.csv")
+city_county.head(10)
+
+
+# # Loading Air Quality Data
+
+# In[23]:
+
+
+AQI=pd.read_csv("export_AQI2.csv")
+AQI.head(10)
+
+
+# # Loading Gender Data
+
+# In[24]:
+
+
+gender=pd.read_csv("gender.csv")
+gender.head(10)
+
+
+# # Loading Walk/Bike Scores Data
+
+# In[142]:
+
+
+exercise=pd.read_csv("exercise score 1.csv")
+exercise.drop(columns=['Unnamed: 4']).head(10)
+
+
+# # Loading Holiday Data
+
+# In[26]:
+
+
+workday=pd.read_csv("HOLIDAY.csv")
+workday.head(10)
+
+
+# # Loading Weather Data
+
+# In[149]:
+
+
+weather=pd.read_csv("export_weather2.csv")
+weather=weather.drop(columns=['AWND','TAVG','Unnamed: 8','Unnamed: 9','WDF2'])
+weather.loc[weather['PLACE'] == 'Los Angeles'].tail(10)
+
+
+# # Create New DataFrame to Merge ALL Database
+
+# In[34]:
+
+
+#twitter['text']=twitter['text'].str.split(' ')
+
+
+# In[35]:
+
+
+#Counts Key Words: 
+
+
+# In[49]:
+
+
+counts=twitter['text'].str.count("running")+twitter['text'].str.count("asthma")+twitter['text'].str.count("outdoor")+twitter['text'].str.count("activity")+twitter['text'].str.count("activities")+twitter['text'].str.count("hiking")+twitter['text'].str.count("jogging")+twitter['text'].str.count("climbing")+twitter['text'].str.count("camping")+twitter['text'].str.count("fishing")+twitter['text'].str.count("hunting")+twitter['text'].str.count("backpacking")+twitter['text'].str.count("biking")+twitter['text'].str.count("Air")+twitter['text'].str.count("air")+twitter['text'].str.count("Pollution")+twitter['text'].str.count("pollution")+twitter['text'].str.count("Running")+twitter['text'].str.count("Asthma")+twitter['text'].str.count("Outdoor")+twitter['text'].str.count("Activity")+twitter['text'].str.count("Activities")+twitter['text'].str.count("Hiking")+twitter['text'].str.count("Jogging")+twitter['text'].str.count("Climbing")+twitter['text'].str.count("Camping")+twitter['text'].str.count("Fishing")+twitter['text'].str.count("Hunting")+twitter['text'].str.count("Backpacking")+twitter['text'].str.count("Biking")
+
+
+# # Count Twitter with keywords and create new dataframe
+
+# In[50]:
+
+
+merge_data=pd.DataFrame({'create':twitter.create_at,'geo_tag_city_name':twitter.geo_tag_city_name,'count': counts})
+
+
+# In[42]:
+
+
+#Split 'create' Cretae to get date: 
+
+
+# In[51]:
+
+
+merge_data['create']=merge_data['create'].str.split('T').str[0]
+
+
+# In[53]:
+
+
+merge_data.head(20)
+
+
+# In[54]:
+
+
+merge_data=merge_data.groupby(['create','geo_tag_city_name'])['count'].sum().reset_index(name="counts")
+
+
+# In[55]:
+
+
+merge_data.count()
+
+
+# In[56]:
+
+
+pouplation=pouplation.drop(columns=['California Cities by Population Rank'])
+
+
+# In[57]:
+
+
+merge_data_1= merge_data.merge(pouplation,left_on='geo_tag_city_name', right_on='City')
+
+
+# In[58]:
+
+
+merge_data_1=merge_data_1.drop(columns=['City'])
+
+
+# In[59]:
+
+
+merge_data_1.head(5)
+
+
+# # Merge Income Dataset According to key['geo_tag_city_name']
+
+# In[60]:
+
+
+merge_data_2 = merge_data_1.merge(income,left_on='geo_tag_city_name', right_on='PLACE')
+
+
+# In[62]:
+
+
+merge_data_2 .head(5)
+
+
+# In[63]:
+
+
+merge_data_3=merge_data_2.drop(columns=['PLACE','COUNTY','POPULATION','POPULATION DENSITY','PER CAPITA INCOME','MEDIAN HOUSEHOLD INCOME'])
+
+
+# In[64]:
+
+
+merge_data_3.head(1)
+
+
+# # Merge County Dataset According to key['geo_tag_city_name']
+
+# In[65]:
+
+
+merge_data_4 = merge_data_3.merge(city_county,left_on='geo_tag_city_name', right_on='Name')
+
+
+# In[66]:
+
+
+merge_data_4.head(5)
+
+
+# In[67]:
+
+
+merge_data_5=merge_data_4.drop(columns=['Name','Type'])
+
+
+# In[68]:
+
+
+merge_data_5.head(3)
+
+
+# In[76]:
+
+
+gender2 = gender.groupby('county')
+gender2=gender2.apply(lambda x: x[x['age'] <50]['pop_total'].sum())/gender2.apply(lambda x: x['pop_total'].sum())
+gender2 = pd.DataFrame(gender2).reset_index()
+gender2.columns = ['county', 'percentage']
+gender2.head(5)
+
+
+# # Merge Age<50 Dataset According to key['County']
+
+# In[77]:
+
+
+merge_data_5['County']=merge_data_5['County'].str.upper()
+
+
+# In[80]:
+
+
+merge_data_6 = merge_data_5.merge(gender2,left_on='County', right_on='county')
+
+
+# In[79]:
+
+
+merge_data_6=merge_data_6.drop(columns=['county'])
+
+
+# In[82]:
+
+
+merge_data_6.head(10)
+
+
+# In[83]:
+
+
+merge_data_6['MEDIAN FAMILY INCOME']=merge_data_6['MEDIAN FAMILY INCOME'].str.lstrip('$') 
+#Make them into numbers instead of string
+
+
+# # Merge exercise Dataset According to key['geo_tag_city_name']
+
+# In[86]:
+
+
+exercise.iloc[32, exercise.columns.get_loc('City')] = 'Los Angeles'
+
+
+# In[88]:
+
+
+merge_data_7 = merge_data_6.merge(exercise,left_on='geo_tag_city_name', right_on='City')
+
+
+# In[89]:
+
+
+merge_data_7.head(10)
+
+
+# In[90]:
+
+
+merge_data_7=merge_data_7.drop(columns=['City','Zip Code','Unnamed: 4'])
+
+
+# In[92]:
+
+
+merge_data_7.head(10)
+
+
+# # Merge Holiday Dataset According to key['create'']
+
+# In[93]:
+
+
+merge_data_8 = merge_data_7.merge(workday,left_on='create', right_on='DATE')
+
+
+# In[94]:
+
+
+merge_data_8 =merge_data_8 .drop(columns=['DATE'])
+
+
+# In[95]:
+
+
+merge_data_8 .head(10)
+
+
+# In[96]:
+
+
+merge_data_8 ['MEDIAN FAMILY INCOME']=merge_data_8 ['MEDIAN FAMILY INCOME'].str.lstrip('$')
+
+
+# In[97]:
+
+
+merge_data_8 ['MEDIAN FAMILY INCOME']=merge_data_8 ['MEDIAN FAMILY INCOME'].str.replace(",","")
+
+
+# In[98]:
+
+
+merge_data_8 ['Population']=merge_data_8 ['Population'].str.replace(",","")
+
+
+# In[99]:
+
+
+merge_data_8 .head(10)
+
+
+# In[100]:
+
+
+merge_data_9 =merge_data_8 .drop(columns=['Area'])
+
+
+# # Merge City_County Dataset According to key['geo_tag_city_name']
+
+# In[101]:
+
+
+city_county.iloc[121, city_county.columns.get_loc('Area')] = 34
+
+
+# In[102]:
+
+
+merge_data_10 = merge_data_9.merge(city_county,left_on='geo_tag_city_name', right_on='Name')
+
+
+# In[103]:
+
+
+merge_data_10=merge_data_10.drop(columns=['Name','Type','County_y'])
+
+
+# In[104]:
+
+
+merge_data_10['Area']=merge_data_10['Area'].str.replace(",","")
+
+
+# In[105]:
+
+
+merge_data_10.head(10)
+
+
+# # Make all numbers to numeric
+
+# In[106]:
+
+
+merge_data_10['MEDIAN FAMILY INCOME']=pd.to_numeric(merge_data_10['MEDIAN FAMILY INCOME'])
+merge_data_10['Population']=pd.to_numeric(merge_data_10['Population'])
+merge_data_10['Area']=pd.to_numeric(merge_data_10['Area'])
+
+
+# # Merge AQI Dataset According to key['create','geo_tag_city_name']
+
+# In[107]:
+
+
+AQI.columns = ['create', 'geo_tag_city_name','County_x','STATE','AQI_VALUE']
+
+
+# In[108]:
+
+
+AQI['County_x']=AQI['County_x'].str.upper()
+
+
+# In[115]:
+
+
+merge_data_11=merge_data_10.merge(AQI,on=['create','geo_tag_city_name'],how='left')
+
+
+# In[116]:
+
+
+merge_data_11.head(10)
+
+
+# In[119]:
+
+
+merge_data_11=merge_data_11.drop(columns=['STATE','County_x_y','County_x_x'])
+
+
+# In[120]:
+
+
+merge_data_11.head(10)
+
+
+# In[113]:
+
+
+weather=weather.drop(columns=['AWND','TAVG','WDF2','Unnamed: 8','Unnamed: 9'])
+
+
+# In[114]:
+
+
+weather.head(10)
+
+
+# In[121]:
+
+
+weather.columns = ['geo_tag_city_name','create','ELEVATION','PRCP','TMAX']
+
+
+# # Merge Weather Dataset According to key['create','geo_tag_city_name']
+
+# In[122]:
+
+
+merge_data_12=merge_data_11.merge(weather,on=['create','geo_tag_city_name'],how='left')
+
+
+# In[124]:
+
+
+merge_data_12.count()
+
+
+# In[128]:
+
+
+merge_data_13=merge_data_13.drop(columns=['ELEVATION_y','PRCP_y','TMAX_y'])
+
+
+# # Add Season Factor
+
+# In[130]:
+
+
+merge_data_13['season']=None
+
+
+# In[132]:
+
+
+merge_data_13.loc[merge_data_13['create'].str.contains('-12-'),'season'] = 'winter'
+merge_data_13.loc[merge_data_13['create'].str.contains('-01-'),'season'] = 'winter'
+merge_data_13.loc[merge_data_13['create'].str.contains('-02-'),'season'] = 'winter'
+merge_data_13.loc[merge_data_13['create'].str.contains('-03-'),'season'] = 'spring'
+merge_data_13.loc[merge_data_13['create'].str.contains('-04-'),'season'] = 'spring'
+merge_data_13.loc[merge_data_13['create'].str.contains('-05-'),'season'] = 'spring'
+merge_data_13.loc[merge_data_13['create'].str.contains('-06-'),'season'] = 'summer'
+merge_data_13.loc[merge_data_13['create'].str.contains('-07-'),'season'] = 'summer'
+merge_data_13.loc[merge_data_13['create'].str.contains('-08-'),'season'] = 'summer'
+merge_data_13.loc[merge_data_13['create'].str.contains('-09-'),'season'] = 'fall'
+merge_data_13.loc[merge_data_13['create'].str.contains('-10-'),'season'] = 'fall'
+merge_data_13.loc[merge_data_13['create'].str.contains('-11-'),'season'] = 'fall'
+
+
+# In[135]:
+
+
+merge_data_13['create']=pd.to_datetime(merge_data_13['create'])
+
+
+# In[136]:
+
+
+merge_data_13.head(10)
+
+
+# In[138]:
+
+
+fillna=merge_data_13.groupby('create').mean().reset_index()
+fillna=fillna.drop(columns=['counts','Population','MEDIAN FAMILY INCOME','percentage','Walk Score','Bike Score','WORKDAY','Area'])
+fillna['create']=pd.to_datetime(fillna['create'])
+merge_data_13['create']=pd.to_datetime(merge_data_13['create'])
+
+
+# In[139]:
+
+
+merge_data_14=merge_data_13.merge(fillna, left_on='create', right_on='create')
+merge_data_14.AQI_VALUE_x.fillna(merge_data_14.AQI_VALUE_y, inplace=True)
+merge_data_14.ELEVATION_x_x.fillna(merge_data_14.ELEVATION_x_y, inplace=True)
+merge_data_14.PRCP_x_x.fillna(merge_data_14.PRCP_x_y, inplace=True)
+merge_data_14.TMAX_x_x.fillna(merge_data_14.TMAX_x_y, inplace=True)
+
+
+# # Change the name of the variables
+
+# In[140]:
+
+
+merge_data_14=merge_data_14.drop(columns=['AQI_VALUE_y','ELEVATION_x_y','PRCP_x_y','TMAX_x_y'])
+merge_data_14=merge_data_14.dropna()
+merge_data_14=merge_data_14.drop_duplicates(['create','geo_tag_city_name'])
+merge_data_14.columns =['create',"geo_tag_city_name","counts",'Population',"INCOME",'county',"percentage","Walk_Score","Bike_Score","WORKDAY","Area","AQI_VALUE","ELEVATION","PRCP","TMAX","season"]
+merge_data_14=merge_data_14.drop(columns=['county'])
+merge_data_14['season'] = merge_data_14['season'].astype("category").cat.codes
+
+
+# # Normalize the population data
+
+# In[ ]:
+
+
+merge_data_14['COUNT_BY_POPULATION'] = 100000*merge_data_14['counts']/merge_data_14['Population']
+
+
+# In[141]:
+
+
+merge_data_14.head(10)
+
+
+# # Export the new full dataset
+
+# In[129]:
+
+
+export_csv = merge_data_14.to_csv (r'fulltextdata_2.csv', index = None, header=True)
+
+
+# In[ ]:
+
+
+
+
